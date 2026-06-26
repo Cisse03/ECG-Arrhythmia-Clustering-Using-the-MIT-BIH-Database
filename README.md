@@ -61,6 +61,5 @@ Overall, K-Means with **K = 5** produced the most meaningful clustering results 
 
 **Massogona Cisse**
 
-Bachelor of Science in Mathematics–Statistics  
-Accelerated Degree Program (ADP) in Statistics  
+Bachelor of Science in Mathematics–Statistics    
 University of Central Oklahoma
