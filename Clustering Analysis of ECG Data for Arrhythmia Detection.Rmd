@@ -1,0 +1,290 @@
+---
+title: "Clustering Analysis of ECG Data for Arrhythmia Detection "
+author: "Massogona cisse"
+date: "5/30/2026"
+output: html_document
+---
+
+## 1. Introduction
+
+The electrocardiogram (ECG) has provided clinical information about the heart since the beginning of the twentieth century. Because the potential difference in each of the different ECG leads provides insight into cardiac function, physicians can use this data to monitor patient status over time and form diagnoses. However, performing a detailed analysis of all ECG signals continuously over long periods of time for each patient is a nontrivial task. Consequently, there is a role for automated ECG analyses in supporting physicians in clinical decision-making. One potentially impact application of ECG data analysis involves the detection of anomalous heartbeats or arrhythmia, but this comes with many challenges. The goal of this work is to evaluate the effectiveness of clustering methods in identifying different types of heart beats from ECG data.
+
+To address these challenges, machine learning methods have been increasingly used for ECG analysis, particularly for arrhythmia detection. In particular, unsupervised learning methods such as clustering can group observations based on similarity without using labeled data. Boulif et al. [3] reviewed recent artificial intelligence techniques for ECG-based arrhythmia diagnosis and discussed how machine learning methods have been applied to improve the detection of abnormal heartbeats. The review also highlighted that overlapping waveform characteristics between heartbeat classes remain a major challenge for accurate classification. Similarly, Nezamabadi et al. [4] discussed the use of clustering methods for ECG analysis and explained that unsupervised learning can identify meaningful waveform patterns without requiring labeled training data. However, they also noted that clustering results do not always correspond to clinically defined heartbeat categories because ECG signals often exhibit overlap between classes. These previous studies suggest that clustering can reveal important underlying structures in ECG data, although additional methods may be needed to improve the separation of heartbeat types. In this study, clustering methods are applied to ECG data to investigate how well they can group heartbeats and how these groups compare to the standard AAMI classifications.
+
+## 2. Methods
+
+### 2.1 MIT-BIH Arrhythmia Database
+
+The data used in this analysis is taken from the MIT-BIH Arrhythmia Database [1] available on PhysioNet [2]. The data contains approximately 30 minutes of ECG data recorded from 47 adult patients. The original data set includes recordings measured at 360 Hz for two ECG leads, but this work will focus on analyzing data from a single lead (lead II). In addition, the records contain physician-labeled whole-beat annotations identifying the beat type.
+
+Overall ,this dataset is commonly used in ECG studies because it includes both normal and abnormal heartbeats. It is useful for testing different methods since the data is realistic and comes from real patients. The annotations provided by doctors allow us to compare our clustering results with the true heartbeat types. In this project, the dataset helps us understand how well clustering methods can group similar ECG signals.
+
+### 2.2 Data Processing
+
+```{r}
+#| echo: false
+#| results: hide
+load("reduced_data.RData")
+reduced <- reduced_data
+ecg_data <- reduced[, 1:150]
+annotations <- reduced$annotations
+id <- reduced$id
+aami <- ifelse(annotations %in% c("N", "L", "R", "e", "j"), "N",
+        ifelse(annotations %in% c("A", "a", "J", "S"), "S",
+        ifelse(annotations %in% c("V", "E"), "V",
+        ifelse(annotations %in% c("F"), "F", "Q"))))
+aami <- as.factor(aami)
+ecg_data <- na.omit(ecg_data)
+
+
+```
+
+The dataset was loaded from the reduce data file, provided as part of this project. Since the data had already been cleaned and preprocessed, no additional cleaning was necessary. The first 150 columns, corresponding to the numerical ECG features, were selected for analysis. Additional variables included annotations and an identifier for each observation. The original annotation labels were recoded according to the AAMI classification system, which groups heartbeats into five categories: Normal (N), Supraventricular (S), Ventricular (V), Fusion (F), and Unknown (Q). This step allows for a standardized comparison between the clustering results and clinical classifications.
+
+### 2.3 Clustering Methods
+
+```{r}
+#| echo: false
+#| results: hide
+set.seed(123)
+km5 <- kmeans(ecg_data, centers = 5, nstart = 20)
+km5
+
+```
+
+K-means clustering was used as the primary method for clustering ECG observations. This method divides the data into a fixed number of clusters by minimizing the variation within each cluster. In this study, the K-means method was applied with k = 5 to correspond to the number of AAMI heart rate classes for comparison purposes. The algorithm was run with several initial starting points to improve the stability of the clustering results. Each observation was then assigned to one of the five clusters based on the similarity of ECG feature values. The clustering results are evaluated in the Results section by comparing the cluster assignments with the AAMI class labels.
+
+### 2.4 Selecting the Number of Clusters
+
+```{r}
+#| echo: false
+#| results: hide
+library(NbClust)
+set.seed(123)
+gap <- NbClust(ecg_data, method = "kmeans", index = "gap")
+gap$Best.nc
+
+# K-means with K = 2
+set.seed(123)
+
+km2 <- kmeans(ecg_data,
+              centers = 2,
+              nstart = 25)
+km2
+```
+
+To determine the appropriate number of clusters, the NbClust package was used with the gap statistic index. The gap statistic compares the clustering structure of the observed data with that of reference datasets generated from a random distribution. The optimal number of clusters is chosen based on the value that provides the strongest separation between groups.
+
+The results indicated that the optimal number of clusters was K= 2. This suggests that the natural structure of the ECG data may consist of two broad groups rather than the five AAMI heartbeat classes. However, clustering was also performed with K= 5to match the number of AAMI categories and allow comparison with the known clinical labels.
+
+### 2.5 Hierarchical Clustering
+
+```{r}
+#| echo: false
+#| results: hide
+set.seed(123)
+dist_ecg <- dist(ecg_data)
+hc <- hclust(dist_ecg, method = "complete")
+hc
+
+```
+
+In addition to K-means, hierarchical clustering was implemented as a second clustering method to provide a different perspective on the structure of the ECG data. Unlike K-means, which requires specifying the number of clusters in advance, hierarchical clustering builds a sequence of nested groupings based on the similarity between observations. In this analysis, clustering was performed using Euclidean distance to measure similarity between observations and the complete linkage method, which considers the maximum distance between elements in different clusters when forming groups. After constructing the hierarchical structure, the clustering was divided into five groups to allow comparison with the AAMI classification system. This approach serves as a complementary method to K-means and helps assess whether similar grouping patterns are observed across different clustering techniques.
+
+## 3. Results and Discussion
+
+### 3.1 Summary Statistics
+
+```{r}
+#| echo: false
+#| results: hide
+dim(ecg_data)
+table(aami)
+table(annotations)
+```
+
+The dataset contains 1000 ECG observations described by 150 numerical features. The observations are distributed across five AAMI heartbeat classes. The Normal (N) class is the most frequent, with 819 observations, while the other classes are less common, including Ventricular (V) with 65 observations, Unknown (Q) with 76 observations, Supraventricular (S) with 26 observations, and Fusion (F) with 14 observations. This distribution shows a strong class imbalance, with the Normal class dominating the dataset. Such imbalance can influence clustering results, as larger groups tend to drive the formation of clusters, while smaller classes may be harder to identify clearly. The original annotation labels include multiple heartbeat types such as N, L, R, V, and others, which are grouped into the AAMI categories for analysis. These features and labels provide the basis for applying clustering methods and evaluating how well the resulting clusters align with known heartbeat classifications.
+
+### 3.2 ECG Shape Plot
+
+```{r}
+#| echo: false
+#| results: hide
+
+matplot(t(km5$centers),
+        type = "l",
+        lty = 1,
+        lwd = 2,
+        xlab = "Time Point",
+        ylab = "ECG Signal",
+        main = "K-means Cluster Centers")
+
+legend("bottomright",
+       legend = paste("Cluster", 1:5),
+       col = 1:5,
+       lty = 1,
+       lwd = 2,
+       cex = 0.8)
+
+```
+
+The cluster center plot shows the average ECG waveform shape for each K-means cluster when K = 5. Each line represents the mean ECG waveform for one cluster across the 150 waveform variables. Some clusters show noticeably different waveform patterns, while others appear more similar. These differences suggest that K-means clustering was able to identify distinct underlying ECG waveform structures in the data. However, some overlap between cluster shapes is still present, which is consistent with the confusion matrix results showing that several AAMI heartbeat classes were distributed across multiple clusters.
+
+### 3.3 PCA Plot for K = 5
+
+```{r}
+#| echo: false
+#| results: hide
+cluster5 <- as.factor(km5$cluster)
+pca <- prcomp(ecg_data, scale = FALSE)
+plot(pca$x[, 1], pca$x[, 2],
+     col = cluster5,
+     pch = 19,
+     xlab = "PC1",
+     ylab = "PC2",
+     main = "K-means Clusters with K = 5")
+
+legend("topright",
+       legend = levels(cluster5),
+       col = 1:length(levels(cluster5)),
+       pch = 19,
+       title = "Cluster")
+```
+
+The PCA plot provides a two-dimensional representation of the ECG data using the first two principal components. Each point corresponds to an observation, and colors represent the clusters obtained from the K-means algorithm with K= 5. The plot shows that some clusters are partially separated, while others overlap significantly. For example, one cluster appears more concentrated on the left side of the plot, while another extends toward the right, indicating some level of differentiation in the data. However, there is also a large region where multiple clusters overlap, suggesting that the ECG features do not clearly distinguish all groups. This overlap indicates that the clustering captures some general structure in the data but does not produce well-separated clusters. Overall, the PCA visualization confirms that while K-means identifies patterns, the separation between clusters is not strong, which is consistent with the complexity of ECG signals.
+
+### 3.4 PCA Plot for K = 2
+
+```{r}
+#| echo: false
+#| results: hide
+cluster2 <- as.factor(km2$cluster)
+plot(pca$x[,1], pca$x[,2],
+     col = cluster2,
+     pch = 19,
+     xlab = "PC1",
+     ylab = "PC2",
+     main = "K-means Clusters with K = 2")
+
+legend("topright",
+       legend = c("Cluster 1", "Cluster 2"),
+       col = 1:2,
+       pch = 19)
+
+```
+
+The PCA plot for K-means clustering with (K = 2) shows that the ECG observations are divided into two main clusters. Cluster 1 is mainly concentrated on the left side of the plot, while Cluster 2 is mostly located on the right side. This separation occurs primarily along the first principal component (PC1), suggesting that the largest variation in the ECG data helps distinguish the two groups. Cluster 2 also appears more spread out, indicating greater variability in waveform patterns within that cluster. Although the clusters show noticeable separation, there is still overlap between the two groups near the center of the plot. This overlap suggests that some ECG waveforms share similar characteristics and are not completely separable using K-means clustering. Overall, the PCA visualization supports the NbClust result selecting (K = 2) and suggests that the ECG data contains two broad underlying waveform patterns rather than completely distinct heartbeat categories.
+
+### 3.5 PCA Plot for AAMI Classes
+
+```{r}
+#| echo: false
+#| results: hide
+
+plot(pca$x[, 1], pca$x[, 2],
+     col = aami,
+     pch = 19,
+     xlab = "PC1",
+     ylab = "PC2",
+     main = "AAMI Classes")
+legend("topright",
+       legend = levels(aami),
+       col = 1:length(levels(aami)),
+       pch = 19,
+       title = "AAMI Class")
+```
+
+The PCA plot of the AAMI classes shows the distribution of the ECG observations based on the first two principal components, with each color representing a different heartbeat class. The Normal (N) class forms a large central group, indicating that most observations are concentrated in a similar region of the feature space. In contrast, the other classes such as Ventricular (V), Supraventricular (S), Fusion (F), and Unknown (Q) are more spread out and appear in smaller groups. However, there is a significant amount of overlap between the classes, especially between the Normal class and the other categories. This overlap suggests that the ECG features do not clearly separate the different heartbeat types in two dimensions. As a result, it is difficult for clustering methods to perfectly distinguish between classes, which explains the mixed results observed in the clustering analysis.
+
+### 3.6 Plot for Hierarchical Clustering Dendogram
+
+```{r}
+#| echo: false
+#| results: hide
+plot(hc,
+     labels = FALSE,
+     main = "Hierarchical Clustering Dendrogram",
+     xlab = "",
+     sub = "")
+
+rect.hclust(hc, k = 5, border = 1:5)
+```
+
+The hierarchical clustering dendrogram shows the grouping structure of the ECG observations using complete linkage. Most of the observations are merged into one large cluster, while a smaller number of observations form separate groups at higher heights in the dendrogram. This suggests that many ECG waveforms share similar characteristics and are difficult to separate into clearly distinct clusters.
+
+The dendrogram also shows that only a few observations remain isolated before joining larger groups, indicating that some waveform patterns differ from the majority of the data. Overall, the hierarchical clustering results suggest weaker separation between heartbeat classes compared to K-means clustering with K=5, since most observations are grouped into one dominant cluster.
+
+### 3.7 K-means Clusterings Results
+
+#### 3.7.1 For K= 5
+
+```{r}
+#| echo: false
+##| results: hide
+cluster5 <- as.factor(km5$cluster)
+table(aami,cluster5)
+
+```
+
+All of the observations from the Fusion (F) class are grouped into cluster 1. Most of the Normal (N) observations are divided between clusters 2 and 5, while smaller numbers appear in clusters 1 and 3 and only one observation appears in cluster 4. The Unknown (Q) observations are mainly grouped into clusters 4 and 5.
+
+The Supraventricular (S) class is mostly grouped into cluster 5, while the Ventricular (V) observations are spread across clusters 1, 2, and 3. Overall, several classes are distributed across multiple clusters, indicating overlap between heartbeat types and suggesting that the ECG waveforms are not completely separated by K-means clustering with (K = 5).
+
+#### 3.7.2  For K = 2
+
+```{r}
+#| echo: false
+##| results: hide
+set.seed(123)
+cluster2 <- as.factor(km2$cluster)
+#km2 <- kmeans(ecg_data,centers = 2,nstart = 25)
+
+cluster2 <- km2$cluster
+
+table(aami, cluster2)
+```
+
+All of the observations from the Fusion (F) class are grouped into cluster 1. Most of the Normal (N) observations are grouped into cluster 2, while a smaller number appear in cluster 1. The Unknown (Q) observations are divided between both clusters, with more observations appearing in cluster 2.
+
+Most of the Supraventricular (S) and Ventricular (V) observations are also grouped into cluster 2, although some Ventricular observations appear in cluster 1. Overall, cluster 2 contains the majority of the observations from several AAMI classes, while cluster 1 contains fewer observations and is dominated mainly by Normal and Ventricular heartbeats.
+
+### 3.8 Hierarchical Clusterings Results
+
+```{r}
+#| echo: false
+##| results: hide
+clust5 <- as.factor(cutree(hc, k = 5))
+table(aami, clust5)
+```
+
+All of the observations from the Fusion (F) and Supraventricular (S) classes are combined into cluster 1. Most of the Normal (N) observations are also grouped into cluster 1, with smaller numbers appearing in clusters 2 and 4. The Unknown (Q) observations are mainly divided between clusters 1, 2, and 3.
+
+Most of the Ventricular (V) observations are split between clusters 1 and 2, with only one observation appearing in cluster 5. Overall, cluster 1 contains observations from almost every AAMI class, while the remaining clusters contain relatively few observations.
+
+### 3.9 Comparison of Clusterings Results
+
+K-means clustering with K = 2, K-means clustering with K = 5, and hierarchical clustering gave different results for the ECG data. The K = 2 solution, which was selected using NbClust, separated the observations into two large groups. The PCA plot showed a general separation between the two clusters, mainly along the first principal component. However, the confusion matrix showed that several AAMI classes were grouped together in the same cluster, meaning that the two-cluster solution was too broad to fully separate the heartbeat types.
+
+When K-means clustering was performed with K = 5, the results showed more detailed grouping patterns that were closer to the five AAMI classes. Some classes, such as the Fusion (F) class, were grouped clearly into one cluster, while other classes like Normal (N), Ventricular (V), and Unknown (Q) were spread across multiple clusters. The PCA plot for K = 5 also showed more separation between groups compared to the K = 2 solution, although overlap between clusters was still present.
+
+Hierarchical clustering produced results that were similar to K-means, but most observations from different AAMI classes were grouped into one large cluster. This suggests that hierarchical clustering was not as effective at separating the heartbeat types in this dataset. Overall, K-means clustering with K = 5 gave the most meaningful grouping results because it provided better separation between classes and matched the AAMI categories more closely than the other methods.
+
+## 4. Conclusion
+
+In this project, clustering methods were applied to ECG waveform data from the MIT-BIH Arrhythmia Database to explore patterns in different heartbeat types. K-means clustering with K = 2, K-means clustering with K = 5, and hierarchical clustering were used to group the ECG signals and compare the clusters with the AAMI heartbeat classes. The results showed that the ECG data contains some clear patterns, but the heartbeat classes were not completely separated by the clustering methods.
+
+The K = 2 solution grouped the observations into two large clusters and showed broad waveform patterns in the data. However, many AAMI classes were combined within the same cluster, which means the two-cluster solution was too general to separate the heartbeat types well. The K = 5 solution produced more detailed grouping patterns and matched the AAMI classes better than the other methods. Some classes, such as the Fusion (F) class, were grouped clearly, while other classes such as Normal (N), Ventricular (V), and Unknown (Q) were spread across multiple clusters. Hierarchical clustering produced similar results, but most observations from different classes were grouped together into one large cluster.
+
+One limitation of this project is that only the ECG waveform variables were used in the clustering analysis. The dataset was also imbalanced because the Normal (N) class contained many more observations than the other classes, which may have affected the clustering results. Since clustering is an unsupervised learning method, the clusters are based only on waveform similarity and do not always match the true heartbeat categories.
+
+Overall, K-means clustering with K = 5 gave the most meaningful results because it showed better separation between heartbeat classes compared to the other methods. In the future, other clustering techniques, dimensionality reduction methods, or supervised learning approaches could be explored to improve ECG classification performance.
+
+### References
+
+[1] G.B. Moody, R.G. Mark, *The impact of the MIT-BIH arrhythmia database*, Eng. Med. Biol. Mag. IEEE 20(3) (2001), pp. 45 - 50.
+
+[2] A.L Goldberger, L.A.N. Amaral, L. Glass, J.M. Hausdorff, P.C. Ivanov, R.G. Mark, J.E. Mietus, G.B. Moody, C.-K. Peng, H.E. Stanley, *PhysioBank, PhysioToolkit, and PhysioNet: components of a new research resource for complex physiologic signals*, Circulation 101(23) (2000), e215 - 3220.
+
+[3] A. Boulif, B. Ananou, M. Ouladsine, and S. Delliaux, A Literature Review: *ECG-Based Models for Arrhythmia Diagnosis Using Artificial Intelligence Techniques, Bioinform. Biol. Insights 17 (2023).*
+
+[4] K. Nezamabadi, S. Homayouni, and A. Ayatollahi, Unsupervised ECG Analysis: A Review, IEEE Reviews in Biomedical Engineering, 15 (2022), pp. 244–260.
